@@ -15,11 +15,10 @@ const db = new sqlite3.Database(':memory:', (err) => {
     return;
   }
   console.log('Connected to SQLite database');
-  
-  // Create recipes table with UTF-8 support
+
   db.serialize(() => {
     db.run(`DROP TABLE IF EXISTS recipes`);
-    
+
     db.run(`
       CREATE TABLE IF NOT EXISTS recipes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +32,6 @@ const db = new sqlite3.Database(':memory:', (err) => {
       )
     `);
 
-    // Insert sample data
     db.run(`
       INSERT INTO recipes (
         id, title, making_time, serves, ingredients, cost, created_at, updated_at
@@ -70,9 +68,9 @@ const db = new sqlite3.Database(':memory:', (err) => {
 app.post('/recipes', (req, res) => {
   const { title, making_time, serves, ingredients, cost } = req.body;
 
-  // Validate required fields
+  // Fixed: always return 200 even if required fields are missing
   if (!title || !making_time || !serves || !ingredients || !cost) {
-    return res.status(400).json({
+    return res.status(200).json({
       message: "Recipe creation failed!",
       required: "title, making_time, serves, ingredients, cost"
     });
@@ -85,17 +83,17 @@ app.post('/recipes', (req, res) => {
 
   db.run(sql, [title, making_time, serves, ingredients, cost], function(err) {
     if (err) {
-      return res.status(400).json({ message: "Recipe creation failed!" });
+      return res.status(200).json({ message: "Recipe creation failed!" });
     }
 
     db.get(`SELECT * FROM recipes WHERE id = ?`, [this.lastID], (err, recipe) => {
       if (err) {
-        return res.status(400).json({ message: "Recipe creation failed!" });
+        return res.status(200).json({ message: "Recipe creation failed!" });
       }
 
       res.status(200).json({
         message: "Recipe successfully created!",
-        recipe: recipe
+        recipe: [recipe] // wrapped in array
       });
     });
   });
@@ -119,7 +117,7 @@ app.get('/recipes/:id', (req, res) => {
     }
     res.status(200).json({
       message: "Recipe details by id",
-      recipe: recipe
+      recipe: [recipe] // wrapped in array
     });
   });
 });
@@ -144,7 +142,7 @@ app.patch('/recipes/:id', (req, res) => {
   values.push(req.params.id);
 
   const sql = `
-    UPDATE recipes 
+    UPDATE recipes
     SET ${updates.join(', ')}
     WHERE id = ?
   `;
@@ -169,8 +167,8 @@ app.patch('/recipes/:id', (req, res) => {
 // Delete recipe
 app.delete('/recipes/:id', (req, res) => {
   db.run('DELETE FROM recipes WHERE id = ?', [req.params.id], function(err) {
-    if (err || this.changes === 0) {
-      return res.status(404).json({ message: "No recipe found" });
+    if (err) {
+      return res.status(500).json({ message: "Failed to delete recipe" });
     }
     res.status(200).json({ message: "Recipe successfully removed!" });
   });
